@@ -1,0 +1,6 @@
+# Local research material (paper full texts and Zotero export); not published
+research_sources/
+zotero_computing_knobs.json
+
+# OS / editor
+.DS_Store

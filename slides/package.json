@@ -1,0 +1,24 @@
+{
+  "name": "sustainable-metrics-slides",
+  "version": "1.0.0",
+  "description": "Reveal.js talk: better metrics for sustainable AI systems (sustainability x systems x SIGMETRICS)",
+  "scripts": {
+    "dev": "vite --open",
+    "build": "vite build",
+    "preview": "vite preview",
+    "pdf": "node scripts/export-pdf.mjs",
+    "shots": "node scripts/screenshots.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "reveal.js": "^5.2.1"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^24.43.1",
+    "vite": "^6.4.5"
+  },
+  "private": true,
+  "type": "module"
+}

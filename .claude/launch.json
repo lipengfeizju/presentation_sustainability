@@ -1,0 +1,15 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "slides",
+      "runtimeExecutable": "/Users/pflics/miniforge3/envs/slides/bin/node",
+      "runtimeArgs": [
+        "/Users/pflics/workspace/presentation_sustainable_computing/slides/node_modules/vite/bin/vite.js",
+        "/Users/pflics/workspace/presentation_sustainable_computing/slides",
+        "--port", "5173", "--strictPort"
+      ],
+      "port": 5173
+    }
+  ]
+}

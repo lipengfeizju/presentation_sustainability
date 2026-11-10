@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build output (deployed to the gh-pages branch, not committed on main)
+dist/
+
+# Generated export
+slides.pdf
+
+# Logs and caches
+*.log
+.vite/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
