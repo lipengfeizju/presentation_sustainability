@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Better Metrics for Sustainable AI Systems</title>
+  <script type="module" crossorigin src="./assets/index-C85KQjXi.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-BkdVYMlU.css">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================== cover ============================== -->
+<section class="cover" data-no-number>
+  <img class="cover-logo" src="./figures/rit-gccis.png" alt="RIT Golisano College of Computing and Information Sciences">
+  <div class="cover-frame">
+    <h1 class="cover-title">Better Metrics for<br>Sustainable AI Systems</h1>
+    <p class="cover-sub">From efficient inference to useful intelligence under resource constraints</p>
+  </div>
+  <p class="cover-name">Pengfei Li</p>
+  <p class="cover-joint">Discussion: sustainability × systems × SIGMETRICS</p>
+  <aside class="notes">
+    <p>Planned length: about 25 minutes of talk plus discussion. Slides 4–6 (SIGMETRICS) and 13–14 (metric method) are the parts to protect if time is short; slides 8, 10 and 12 can each shrink to 30 seconds.</p>
+    <p>【提示】中心论点：A sustainability metric becomes a systems contribution when it changes a concrete decision, captures an effect that existing metrics miss, and survives measurement and validation.</p>
+  </aside>
+</section>
+
+<!-- ============================== 1. framing ============================== -->
+<section data-section="Framing">
+  <h2 class="t">What should we optimize as AI scales?</h2>
+  <div class="opt3">
+    <div class="col">
+      <h3>Knobs we already have<span>familiar systems controls</span></h3>
+      <div class="chips">
+        <span class="chip">Batching</span><span class="chip">Caching</span><span class="chip">Provisioning</span>
+        <span class="chip">Power caps</span><span class="chip">Placement / routing</span><span class="chip">Heterogeneous hardware</span>
+      </div>
+    </div>
+    <div class="ar">→</div>
+    <div class="col">
+      <h3>What we usually measure<span>how the knobs are judged today</span></h3>
+      <div class="chips">
+        <span class="chip a">Latency</span><span class="chip a">Throughput</span><span class="chip a">Cost</span><span class="chip a">Energy efficiency</span>
+      </div>
+    </div>
+    <div class="ar">→</div>
+    <div class="col new">
+      <h3>What sustainability adds<span>consequences the usual metrics may miss</span></h3>
+      <div class="chips">
+        <span class="chip">Carbon<br><small style="font-weight:400;font-size:20px">operational + embodied</small></span>
+        <span class="chip">Water</span><span class="chip">Public health</span><span class="chip">Power capacity &amp; dynamics</span>
+      </div>
+    </div>
+  </div>
+  <div class="banner" style="top:720px">Which additional metric changes the decision?
+    <small>A better metric can reveal a different operating point, and that operating point may need a different system design.</small>
+  </div>
+  <aside class="notes">
+    <p>Thanks for taking the time to discuss this. I would like to frame sustainable computing through a systems question: as we scale AI, what should the system optimize, and what information does it need to make that decision?</p>
+    <p>We already have many useful controls: batching, caching, resource provisioning, power caps, placement, and heterogeneous hardware. These controls are usually evaluated through latency, throughput, cost, or sometimes energy efficiency. Sustainability adds another question: do those measurements capture the consequences we actually care about?</p>
+    <p>My working hypothesis is that a better metric can reveal a different operating point, and that operating point may require a different system design. So there are two contributions to think about together: defining what matters, and building the mechanism that can act on it.</p>
+    <p>I will use AI inference as the running example because it connects directly to current serving systems. I will first give the minimum sustainability background, then explain the research style around SIGMETRICS, walk through a few papers, and finally outline possible projects.</p>
+    <p>【提示】开头直接讲合作问题。不要先花五分钟讲全球排放数字；听众最需要的是“这和我的 systems 研究有什么关系”。</p>
+  </aside>
+</section>
+
+<!-- 2. energy vs carbon -->
+<section>
+  <h2 class="t">Energy is not carbon</h2>
+  <div class="area top" style="grid-template-columns: 900px 1fr; gap: 90px;">
+    <div>
+      <div class="eq"><span class="lbl">Operational carbon</span>
+        carbon <span class="op">=</span> Σ<sub style="font-size:22px">region, time</sub> energy <span class="op">×</span> carbon intensity
+        <small>gCO₂e = kWh × gCO₂e/kWh. Same electricity, different place or hour → different carbon.</small>
+      </div>
+      <div class="caveat" style="margin-top:34px"><b>Declare the boundary.</b> GPU energy ≠ server energy ≠ facility energy (cooling, power delivery). If facility energy is measured, do not multiply by PUE again.</div>
+      <div class="caveat" style="margin-top:18px"><b>Average vs. marginal intensity</b> answer different questions (reporting vs. “what changes if I shift this load?”); they are not interchangeable.</div>
+    </div>
+    <div class="toy">
+      <p class="col-h">A teaching example <span>(not paper data)</span></p>
+      <div class="grp">
+        <p class="h">Energy</p>
+        <div class="row"><span class="nm">Config A</span><div class="bar e" style="width:50%">1.0 kWh</div></div>
+        <div class="row"><span class="nm">Config B</span><div class="bar e" style="width:60%">1.2 kWh</div></div>
+      </div>
+      <div class="grp">
+        <p class="h">Grid intensity</p>
+        <div class="row"><span class="nm">Config A</span><span>600 gCO₂e/kWh</span></div>
+        <div class="row"><span class="nm">Config B</span><span>100 gCO₂e/kWh</span></div>
+      </div>
+      <div class="grp">
+        <p class="h">Operational carbon</p>
+        <div class="row"><span class="nm">Config A</span><div class="bar c" style="width:100%">600 g</div></div>
+        <div class="row"><span class="nm">Config B</span><div class="bar c" style="width:20%">120 g</div></div>
+      </div>
+      <p style="font-size:26px;color:#333">B uses <b>more</b> energy but emits <b>5× less</b> under this accounting.</p>
+    </div>
+  </div>
+  <aside class="notes">
+    <p>There are two distinctions that will be useful throughout the talk. First, energy and carbon are different quantities. Energy describes electricity consumption. Operational carbon also depends on how that electricity is generated, and therefore on location and time. Reducing energy is valuable, but comparing two deployments requires knowing both their electricity use and the relevant carbon intensity.</p>
+    <p>Here is a toy example, not data from any paper: configuration A uses 1 kWh on a 600 gram-per-kWh grid, so 600 grams. Configuration B uses 1.2 kWh on a 100 gram grid, so 120 grams. B uses more energy but emits less under this accounting. A real comparison would also need latency, network, facility, and capacity boundaries.</p>
+    <p>Always state the measurement boundary: GPU, server, or facility. And note that average and marginal carbon intensity answer different questions.</p>
+    <p>【提示】30 秒讲完这个例子即可。不要说这个例子证明了真实电网的边际减排。</p>
+  </aside>
+</section>
+
+<!-- 3. lifecycle -->
+<section>
+  <h2 class="t">Lifecycle: operational + embodied carbon</h2>
+  <div class="area top" style="grid-template-columns: 960px 1fr; gap: 90px;">
+    <div>
+      <div class="eq"><span class="lbl">Accounted lifecycle carbon</span>
+        operational carbon <span class="op">+</span> allocated embodied carbon
+        <small>Embodied = manufacturing footprint of GPUs, CPUs, memory, SSDs, boards…, amortized over lifetime.</small>
+      </div>
+      <p class="col-h" style="margin-top:40px">The metric depends on the decision horizon</p>
+      <div class="cards c2" style="gap:26px">
+        <div class="card"><p class="tag">Minutes – hours</p><h3 style="font-size:32px">Control an existing fleet</h3><p>Routing, batching, power caps. Hardware is already built.</p></div>
+        <div class="card o"><p class="tag">Months – years</p><h3 style="font-size:32px">Provision &amp; procure</h3><p>Capacity, hardware mix, lifetime, replacement. Embodied carbon is a real lever.</p></div>
+      </div>
+      <div class="caveat" style="margin-top:28px">Allocating past manufacturing to a request is an <b>accounting convention</b>: deleting the request does not undo the manufacturing emissions.</div>
+    </div>
+    <figure class="fig">
+      <img src="./figures/ecoserve-fig1a.png" alt="EcoServe Figure 1 left: CPU vs GPU share of TDP and of embodied carbon" style="width:780px">
+      <figcaption class="cap"><b>EcoServe:</b> in the studied A100/H100 inference servers, host CPUs are a minority of provisioned power (TDP) but the <b>majority of embodied carbon</b>. Measuring only GPU joules misses this.</figcaption>
+    </figure>
+  </div>
+  <p class="src">[P1] Y. Li, Z. Hu, E. Choukse, R. Fonseca, G. E. Suh, U. Gupta. EcoServe: Designing Carbon-Aware AI Inference Systems. arXiv:2502.05043, 2025 (Fig. 1, left).</p>
+  <aside class="notes">
+    <p>Second, computing has a lifecycle. Running the hardware consumes electricity, while manufacturing the hardware also creates emissions. We call these operational and embodied carbon. Once embodied carbon is included, resource capacity, hardware lifetime, and replacement decisions enter the problem.</p>
+    <p>This is why I find EcoServe useful as background. In its studied deployments, GPU operation and the manufacturing footprint of host components play different roles: the host is a small share of power but a large share of embodied carbon. Its broader message is to reason across provisioning and scheduling, rather than measuring only accelerator electricity.</p>
+    <p>There is an accounting subtlety. If a device has already been manufactured, assigning part of that footprint to a request is an accounting convention. It does not mean that deleting the request reverses manufacturing emissions. For runtime control, procurement, and reporting, we may need different views of the same system. So I would always state the measurement boundary and the decision horizon: are we controlling an existing fleet over minutes, or deciding what hardware to buy over years?</p>
+    <p>【提示】这页只教两个概念。Embodied 的“分摊”与“真实新增排放”区别很重要，避免后面把 accounting reduction 讲成物理减排。不要把 EcoServe 特定 traces 中的比例推广到所有数据中心。</p>
+  </aside>
+</section>
+
+<!-- ============================== 2. SIGMETRICS ============================== -->
+<section data-section="SIGMETRICS">
+  <h2 class="t">SIGMETRICS in one slide</h2>
+  <div class="area top facts" style="grid-template-columns: 1fr 1fr; gap: 90px; top: 230px">
+    <dl>
+      <dt>Scope</dt>
+      <dd><q>The design, modeling, measurement, and performance analysis of computer systems.</q>
+        <small>Metrics named in the CFP: latency, throughput, reliability, cost, accuracy, fairness, <b>energy, and carbon footprint</b>.</small></dd>
+      <dt>Tracks</dt>
+      <dd>Learning · Measurement &amp; Applied Modeling · Systems · Theory · <b>Operational Systems</b> <small>(new in 2026: deployed systems in significant real-world use; lessons learned)</small></dd>
+      <dt>Sustainability keywords in the CFP</dt>
+      <dd><span class="chip a" style="display:inline-block;margin:0 8px 8px 0">Energy-efficient and carbon-aware computing systems</span><span class="chip a" style="display:inline-block">Sustainability and power management</span></dd>
+    </dl>
+    <dl>
+      <dt>Journal-style model: three deadlines a year</dt>
+      <dd><div class="tl"><div><b>Summer</b>late July</div><div><b>Fall</b>mid October</div><div><b>Winter</b>mid January</div></div>
+        <small>Accepted papers appear in POMACS (Proc. ACM on Measurement and Analysis of Computing Systems) and are presented at the conference.</small></dd>
+      <dt>Outcomes</dt>
+      <dd><div class="outcomes"><div><b>Accept</b>with shepherding</div><div><b>Resubmit</b>major revision, within the next three deadlines</div><div><b>Reject</b>no resubmission for 12 months</div></div></dd>
+      <dt>Format</dt>
+      <dd>Up to 20 pages, single-column acmsmall; unlimited references and appendices.</dd>
+    </dl>
+  </div>
+  <p class="src">[S1] ACM SIGMETRICS 2026 Call for Papers, sigmetrics.org/sigmetrics2026/call_for_papers.html (2026 cycle deadlines: Jul 29 2025, Oct 14 2025, Jan 13 2026).</p>
+  <aside class="notes">
+    <p>What is SIGMETRICS? The official scope combines systems design with measurement, modeling, and performance analysis. It explicitly lists metrics such as latency, throughput, fairness, energy, and carbon footprint, and the call has two sustainability keywords: energy-efficient and carbon-aware computing systems, and sustainability and power management.</p>
+    <p>It works more like a journal than a typical systems conference: there are three deadlines a year, papers are published in POMACS, and a paper can get a major-revision outcome and come back at one of the next three deadlines. Papers can be up to 20 single-column pages. There is also a new Operational Systems track for deployed systems.</p>
+    <p>【提示】这页是事实页，一分钟。重点是 “journal-style, revision 可回炉”，对系统方向的人来说和 OSDI/SOSP 的节奏不同。</p>
+  </aside>
+</section>
+
+<!-- research style -->
+<section>
+  <h2 class="t">The research style: an explanatory chain</h2>
+  <div class="flow" style="position:absolute;left:96px;right:96px;top:200px;height:110px">
+    <div class="box">Observation<small>a proxy misses something</small></div><div class="ar">→</div>
+    <div class="box">Measurement / model<small>quantify and explain it</small></div><div class="ar">→</div>
+    <div class="box">Principled decision<small>algorithm, controller, policy</small></div><div class="ar">→</div>
+    <div class="box hl">Validation<small>bounds, traces, prototype</small></div>
+  </div>
+  <div style="position:absolute;left:96px;right:96px;top:345px">
+    <table class="tbl mapt">
+      <thead><tr><th>Entry point</th><th>Typical question</th><th>Convincing evidence</th><th style="width:430px">Example today</th></tr></thead>
+      <tbody>
+        <tr><td>Measurement</td><td>What does a common proxy miss? How often?</td><td>Calibrated instruments, repeated runs, diverse workloads, released data</td><td class="ex"><div class="exi"><img src="./figures/powertrace-fig2b.png" alt=""><span>LLM-PowerTrace</span></div></td></tr>
+        <tr><td>Analytical modeling</td><td>Which coupling sets capacity, delay, footprint?</td><td>Explicit assumptions, prediction error, out-of-sample checks</td><td class="ex"><div class="exi"><img src="./figures/pd-fig1.png" alt=""><span>PD power-aware provisioning</span></div></td></tr>
+        <tr><td>Algorithms / online control</td><td>How to decide under uncertain load and signals?</td><td>Guarantees where possible, trace evaluation, overhead</td><td class="ex"><div class="exi"><img src="./figures/osdm-fig1.png" alt=""><span>Online Smoothed Demand Mgmt., Green Bin Packing</span></div></td></tr>
+        <tr><td>Systems / resource mgmt.</td><td>Which knobs realize the gain? On what timescale?</td><td>Prototype, strong baselines, ablations, end-to-end SLOs</td><td class="ex"><div class="exi"><img src="./figures/greencache-fig8a.png" alt=""><span>GreenCache, HealthServe</span></div></td></tr>
+        <tr><td>Accounting / incentives</td><td>How to split a shared footprint? What does it encourage?</td><td>Axioms, complexity, error vs. a reference allocation</td><td class="ex"><div class="exi"><img src="./figures/accounting-fig1.png" alt=""><span>Fair carbon accounting</span></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="src">My reading of the CFP scope and of the papers in this talk, not an official review rubric. Thumbnails: figures from the example papers (see slides 7–13).</p>
+  <aside class="notes">
+    <p>What does SIGMETRICS bring to this problem? My interpretation of the research style is that a convincing sustainability paper needs an explanatory chain. We observe a phenomenon, measure or model it, use that understanding to make a decision, and validate the result.</p>
+    <p>There are several entry points. A measurement paper can show that a common proxy misses important behavior. A modeling paper can explain a capacity or scheduling tradeoff. A systems paper can build a controller that uses those insights. An algorithms paper can formalize decisions under uncertain workloads or changing resource availability. And accounting work asks how to split a shared footprint and what behavior that split encourages.</p>
+    <p>These questions are grounded in recognizable systems decisions. That is the bridge: sustainability exposes new measurement and control problems inside systems we already know how to build.</p>
+    <p>【提示】“社区都玩什么”用这张方法地图回答。强调这是你的解读，不是 reviewer 的评分模板。</p>
+  </aside>
+</section>
+
+<!-- sustainability at SIGMETRICS 2026 -->
+<section>
+  <h2 class="t">Sustainability papers at SIGMETRICS 2026</h2>
+  <p class="lead">A sample from the accepted-papers list: every entry point on the map is represented</p>
+  <div class="pgrid">
+    <div class="pc"><span class="rt m">Measurement</span>
+      <div class="pim"><img src="./figures/traffic-fig2.png" alt="Flow-level carbon tracing at a router"></div>
+      <h4>Carbon footprint of traffic flows</h4><p>Per-flow carbon from router power models and traffic counters</p><small>El-Zahr, Zilberman (Oxford)</small></div>
+    <div class="pc"><span class="rt m">Measurement</span>
+      <div class="pim"><img src="./figures/llmwf-fig4a.png" alt="Energy per token vs. batch size for four multi-request workloads"></div>
+      <h4>LLM multi-request workflows</h4><p>Energy per token vs. batch size and power cap when requests depend on each other</p><small>Ifath, Haque (Dalhousie)</small></div>
+    <div class="pc"><span class="rt m">Measurement</span>
+      <div class="pim"><img src="./figures/minos-fig1.png" alt="GPU power time series with spikes above TDP"></div>
+      <h4>Minos</h4><p>Group GPU workloads by their power-spike distribution to predict power under frequency caps</p><small>Jain, Jiang, Sinclair, Venkataraman (Wisconsin)</small></div>
+    <div class="pc"><span class="rt a">Accounting</span>
+      <div class="pim"><img src="./figures/accounting-fig1.png" alt="Non-linear energy per batch vs. number of tokens"></div>
+      <h4>Fair carbon accounting for LLM serving</h4><p>Split one shared batch's footprint across requests (Shapley reference)</p><small>Li, Han, …, Gupta · PER / CarbonMetrics workshop</small></div>
+    <div class="pc"><span class="rt s">Systems</span>
+      <div class="pim"><img src="./figures/greencache-fig8a.png" alt="Carbon ratio of caching across 12 grids"></div>
+      <h4>GreenCache <em>· case study</em></h4><p>Size the KV cache counting the SSDs' embodied carbon</p><small>Tian, Sun, Ding, Liu (Waterloo, Purdue)</small></div>
+    <div class="pc"><span class="rt s">Systems</span>
+      <div class="pim"><img src="./figures/healthserve-fig4.png" alt="Health cost and carbon of five serving strategies"></div>
+      <h4>HealthServe <em>· case study</em></h4><p>Route and configure inference with a modeled public-health cost</p><small>Zhou, Basu Roy (Utah)</small></div>
+    <div class="pc"><span class="rt g">Algorithms</span>
+      <div class="pim">
+        <svg viewBox="0 0 400 170" width="100%" height="100%" role="img" aria-label="Sketch of green bin packing: each bin has a free green region of size G and a black region with per-unit cost beta">
+          <g font-family="Arial" font-size="15">
+            <rect x="30" y="15" width="70" height="140" fill="#fff" stroke="#333" stroke-width="2"/>
+            <rect x="31" y="85" width="68" height="69" fill="#d8efd9"/>
+            <rect x="31" y="16" width="68" height="69" fill="#e3e3e3"/>
+            <rect x="36" y="117" width="58" height="35" fill="#2e7d32"/>
+            <rect x="36" y="88" width="58" height="26" fill="#43a047"/>
+            <rect x="36" y="58" width="58" height="27" fill="#555"/>
+            <line x1="28" y1="85" x2="102" y2="85" stroke="#2e7d32" stroke-width="2" stroke-dasharray="5 3"/>
+            <rect x="125" y="15" width="70" height="140" fill="#fff" stroke="#333" stroke-width="2"/>
+            <rect x="126" y="85" width="68" height="69" fill="#d8efd9"/>
+            <rect x="126" y="16" width="68" height="69" fill="#e3e3e3"/>
+            <rect x="131" y="104" width="58" height="48" fill="#2e7d32"/>
+            <line x1="123" y1="85" x2="197" y2="85" stroke="#2e7d32" stroke-width="2" stroke-dasharray="5 3"/>
+            <rect x="222" y="22" width="16" height="16" fill="#d8efd9" stroke="#2e7d32"/><text x="246" y="35" fill="#222">green part G: free</text>
+            <rect x="222" y="56" width="16" height="16" fill="#e3e3e3" stroke="#555"/><text x="246" y="69" fill="#222">black part: β per unit</text>
+            <rect x="222" y="90" width="16" height="16" fill="none" stroke="#333" stroke-width="2"/><text x="246" y="103" fill="#222">each bin: opening cost</text>
+            <text x="222" y="140" fill="#777" font-size="13">items arrive online</text>
+          </g>
+        </svg>
+      </div>
+      <h4>Green Bin Packing</h4><p>Online bin packing where part of each bin is free and the rest costs extra</p><small>Bibbens, Sigrist, Sun, Kamali, Hajiesmaili</small></div>
+    <div class="pc"><span class="rt g">Algorithms</span>
+      <div class="pim"><img src="./figures/osdm-fig1.png" alt="Online smoothed demand management: buy, store and deliver energy"></div>
+      <h4>Online Smoothed Demand Management</h4><p>Buy, store and deliver energy at changing prices, penalizing abrupt changes</p><small>Lechowicz, Christianson, Hajiesmaili, Wierman, Shenoy</small></div>
+  </div>
+  <p class="src">Selected by topic from sigmetrics.org/sigmetrics2026/accepted.html (checked 2026-11-10); not exhaustive. Figures: El-Zahr &amp; Zilberman Fig. 2; Ifath &amp; Haque Fig. 4a; Jain et al. Fig. 1; Li et al. Fig. 1 (PER 53(2), 2025, not POMACS); Tian et al. Fig. 8a; Zhou &amp; Basu Roy Fig. 4; Green Bin Packing: my sketch of the model; Lechowicz et al. Fig. 1.</p>
+  <aside class="notes">
+    <p>To make this concrete, here is a sample of sustainability-related papers in this year's program. They cover the whole map. Measurement papers: per-flow carbon in networks, energy of multi-request LLM workflows, and GPU power spikes. An accounting paper on splitting a shared batch's footprint. Systems papers that add a new objective to a familiar serving system. And algorithms papers: bin packing where part of each bin is "free" green capacity, and online energy purchasing and storage with a smoothness penalty, evaluated on a data center with a battery.</p>
+    <p>Sustainability is an active direction that fits the community's methods, but it is one direction among many; I would not say the whole community works on green AI. The two orange systems papers are my two main case studies.</p>
+    <p>【提示】只举例，不要逐篇念：按颜色讲四类即可，约 1 分钟。Green Bin Packing 的图是自己画的模型示意，不是论文原图。Fair carbon accounting 是 PER/workshop 论文，不是 POMACS 主会论文。</p>
+  </aside>
+</section>
+
+<!-- ============================== 3. case studies ============================== -->
+<section data-section="Case studies">
+  <h2 class="t">A familiar knob, a different optimum: GreenCache</h2>
+  <div class="area top" style="grid-template-columns: 760px 1fr; gap: 70px; top: 220px">
+    <div>
+      <ul class="b sm">
+        <li><b>Knob:</b> KV-cache (prompt) reuse and cache capacity<small>Avoids recomputing shared context.</small></li>
+        <li><b>New term:</b> embodied carbon of the SSDs holding the cache<small>Avoided compute must pay for the storage used to avoid it.</small></li>
+        <li><b>Mechanism:</b> resize the cache as load and grid intensity change, under latency SLOs</li>
+        <li><b>Reported:</b> Llama-3 70B, French grid: <span class="key">−15.1% carbon on average</span> (max −25.3%), &gt;90% of requests within SLO<small>Results for that evaluation, not a guarantee for every cache.</small></li>
+      </ul>
+    </div>
+    <figure class="fig">
+      <img src="./figures/greencache-fig8a.png" alt="GreenCache Figure 8a: carbon ratio of caching across 12 grids" style="width:100%">
+      <figcaption class="cap"><b>Same cache, opposite sign.</b> Carbon with caching ÷ without, across 12 grids sorted by carbon intensity. Below the red line, caching saves carbon. On very clean grids (SE, IS, FR) the SSDs' embodied carbon outweighs the avoided compute.</figcaption>
+    </figure>
+  </div>
+  <div class="banner" style="top:840px">Open question: where is the decision boundary, and can a light model predict it online?</div>
+  <p class="src">[P2] Y. Tian, D. Sun, Y. Ding, S. Liu. Cache Your Prompt When It's Green: Carbon-Aware Caching for LLM Serving. SIGMETRICS 2026; arXiv:2505.23970 (Fig. 8a).</p>
+  <aside class="notes">
+    <p>GreenCache is a good first example because caching is familiar to every systems researcher. Reusing a prompt's KV cache can avoid repeated computation, but storing that cache requires storage resources. The paper includes SSD embodied carbon in the tradeoff.</p>
+    <p>The figure shows why that matters: with the same cache, the carbon ratio is below one on carbon-intensive grids, so caching saves carbon, but above one on very clean grids like Sweden, Iceland, or France, because the storage's manufacturing footprint dominates the small operational saving. Over a day, it also changes with grid intensity.</p>
+    <p>So the decision is more interesting than maximizing cache hits. GreenCache adapts resource allocation to balance carbon and latency under changing workloads. In its reported Llama-3 70B experiment on the French grid, average carbon reduction is 15.1 percent, up to 25.3 percent, with more than 90 percent of requests meeting latency constraints. Those are results for that evaluation, not a general guarantee.</p>
+    <p>The follow-up question I'd bring to a collaboration is about decision boundaries: under which workloads, reuse patterns, and hardware assumptions does the preferred cache configuration change, and can we predict that boundary with a lightweight model online?</p>
+    <p>【提示】只报这一组实验数字。重点讲“加 embodied carbon 后，为什么配置选择会变”。不要说删掉 cache 就能抵消已经发生的 SSD 制造排放。</p>
+  </aside>
+</section>
+
+<!-- HealthServe -->
+<section>
+  <h2 class="t">Beyond carbon: public health (HealthServe)</h2>
+  <div class="flow" style="position:absolute;left:96px;right:96px;top:200px;height:140px">
+    <div class="box">Electricity<small>per datacenter, per hour</small></div><div class="ar">→</div>
+    <div class="box">Pollutant emissions<small>PM2.5, SO₂, NOₓ</small></div><div class="ar">→</div>
+    <div class="box">Dispersion &amp; exposure<small>weather, population</small></div><div class="ar">→</div>
+    <div class="box og">Modeled health cost<small>US$ (AVERT, COBRA)</small></div><div class="ar">→</div>
+    <div class="box og hl">Routing &amp; serving config<small>with carbon, TTFT SLO</small></div>
+  </div>
+  <figure class="fig" style="position:absolute;left:96px;right:96px;top:380px">
+    <img src="./figures/healthserve-fig4.png" alt="HealthServe Figure 4: health cost and carbon footprint of five strategies" style="width:1500px">
+    <figcaption class="cap" style="width:1500px;margin:16px auto 0"><b>Decision reversal.</b> One hour of production LLM traces, oracle solutions: <b>Carbon-Opt</b> has the lowest carbon but a higher health cost; <b>Health-Opt</b> the reverse. The new metric changes which deployment is preferred.</figcaption>
+  </figure>
+  <div class="caveat abs" style="top:790px">Health costs are <b>model estimates</b> (screening-level), not clinical observations of illness caused by individual requests; an evaluation should carry that uncertainty.</div>
+  <p class="src">[P3] S. Zhou, R. Basu Roy. HealthServe: A Public Health-Aware Inference Framework. POMACS 10(2), Art. 40, 2026 (SIGMETRICS 2026). doi:10.1145/3805638 (Fig. 4).</p>
+  <aside class="notes">
+    <p>HealthServe gives an especially direct example of introducing a new objective. Carbon measures greenhouse-gas impact, while electricity generation also produces pollutants whose health effects depend on location, atmospheric conditions, and population exposure. The paper translates those effects into modeled health costs and uses them alongside carbon and latency objectives.</p>
+    <p>The system jointly considers geographic routing and serving configurations: GPU frequency, parallelism, batch size, through a global and local scheduler. The key point is this figure: a lower-carbon choice does not necessarily minimize health damage. Carbon-Opt and Health-Opt are different solutions. The added metric changes which deployment is preferred.</p>
+    <p>These health costs are estimates derived from environmental and health-impact models. They are not clinical observations of illnesses caused by individual inference requests. A systems evaluation should preserve that distinction and expose uncertainty in the model.</p>
+    <p>【提示】这是本场最重要的“新 metric → 新系统行为”例子。slow/fast knobs 的不同重配置时标值得向 systems faculty 强调。</p>
+  </aside>
+</section>
+
+<!-- proxies disagree -->
+<section>
+  <h2 class="t">When is carbon an inadequate proxy?</h2>
+  <div class="area top" style="grid-template-columns: 1.55fr 1fr; gap: 70px; top: 220px">
+    <figure class="fig">
+      <p class="col-h">Health vs. carbon intensity <span>Texas, 2024</span></p>
+      <img src="./figures/healthserve-fig3.png" alt="HealthServe Figure 3: health intensity and carbon intensity by hour and month" style="width:100%">
+      <figcaption class="cap">Hourly and monthly patterns differ: low-carbon hours can be high-health-cost hours (pollutant dispersion depends on the weather).</figcaption>
+    </figure>
+    <figure class="fig">
+      <p class="col-h">Carbon vs. water <span>WaterWise</span></p>
+      <img src="./figures/waterwise-fig3a.png" alt="WaterWise Figure 3a: carbon and water savings of carbon-greedy and water-greedy optima" style="width:470px">
+      <p style="font-size:22px;color:#444;margin-top:8px"><span style="color:#5fae5f">▼</span> Carbon-Greedy-Opt &nbsp; <span style="color:#3b77b0">■</span> Water-Greedy-Opt<br><span class="mut">point labels = delay tolerance</span></p>
+      <figcaption class="cap">Optimizing either footprint alone is suboptimal for the other in geo-distributed scheduling.</figcaption>
+    </figure>
+  </div>
+  <div class="banner" style="top:800px">Look for disagreement first. Then ask: is it frequent, can the system react in time, and does the gain survive uncertainty?</div>
+  <p class="src">[P3] HealthServe, Fig. 3. [P4] Y. Jiang, R. Basu Roy, R. Kanakagiri, D. Tiwari. WaterWise: Co-optimizing Carbon- and Water-Footprint Toward Environmentally Sustainable Cloud Computing. PPoPP 2025 (Fig. 3a).</p>
+  <aside class="notes">
+    <p>Why does this happen? HealthServe shows that health intensity and carbon intensity follow different temporal patterns: they depend on different factors, the fuel mix versus pollutant dispersion and population exposure.</p>
+    <p>WaterWise provides a complementary example. It studies carbon and water together in geographically distributed workload scheduling and shows that optimizing either objective alone can leave gains on the table for the other.</p>
+    <p>The broader research question I take from these papers is: when is an existing objective an inadequate proxy? For a new project, I would first look for such disagreements, then ask whether they occur often enough to matter, whether a system can respond within its latency and capacity constraints, and whether the gain remains under reasonable uncertainty. That gives a stronger case than adding another column to a benchmark table.</p>
+    <p>【提示】WaterWise 只作 30 秒补充。不要把 carbon-water 冲突说成所有地区、所有时刻都必然存在。WaterWise 不是 SIGMETRICS 论文。</p>
+  </aside>
+</section>
+
+<!-- attribution -->
+<section>
+  <h2 class="t">Who owns the footprint of a shared batch?</h2>
+  <div class="area top" style="grid-template-columns: 840px 1fr; gap: 70px; top: 220px">
+    <div>
+      <div class="attr">
+        <svg width="840" height="230" viewBox="0 0 840 230" aria-hidden="true">
+          <defs><marker id="ah" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#888"/></marker></defs>
+          <line x1="202" y1="45" x2="284" y2="88" stroke="#888" stroke-width="3" marker-end="url(#ah)"/>
+          <line x1="202" y1="168" x2="284" y2="140" stroke="#888" stroke-width="3" marker-end="url(#ah)"/>
+          <line x1="503" y1="115" x2="574" y2="115" stroke="#888" stroke-width="3" marker-end="url(#ah)"/>
+          <text x="800" y="122" font-size="40" fill="#c62828" font-weight="700">?</text>
+        </svg>
+        <div class="req ra">Request A<small>short prompt</small></div>
+        <div class="req rb">Request B<small>long prompt</small></div>
+        <div class="batch"><div>Shared batch<small>continuous batching</small></div></div>
+        <div class="meas"><div>One footprint<small>measured total</small></div></div>
+      </div>
+      <div class="methods">
+        <div class="m"><b>By tokens</b><span>Easy to compute; but simple does not mean it captures shared, non-linear costs.</span></div>
+        <div class="m"><b>Leave-one-out</b><span>Marginal effect of each request; shares need not add up to the total.</span></div>
+        <div class="m"><b>Shapley value</b><span>Fair under stated axioms and cost model; exact computation is exponential → approximate.</span></div>
+      </div>
+      <div class="chips" style="margin-top:22px"><span class="chip a">Scalability</span><span class="chip a">Fairness</span><span class="chip a">Sample efficiency</span><span class="chip a">Incentives</span></div>
+    </div>
+    <figure class="fig">
+      <img src="./figures/accounting-fig1.png" alt="Figure 1: non-linear energy/time per batch for LLM operators vs. number of tokens" style="width:100%">
+      <figcaption class="cap"><b>Why it is hard:</b> energy / time per batch grows step-wise and non-linearly with the tokens in a batch (Llama-8B, A100), so simple latency-based attribution fails.</figcaption>
+      <div class="caveat" style="margin-top:24px;text-align:left">Separate two outputs: a <b>consistent allocation</b> of the measured total, and the <b>causal saving</b> of an action (delay, reroute). They answer different questions.</div>
+    </figure>
+  </div>
+  <p class="src">[P5] Y. Lisa Li, L. Han, G. E. Suh, C. Delimitrou, F. Kazhamiaka, E. Choukse, R. Fonseca, L. Yu, J. Mace, U. Gupta. Fair, Practical, and Efficient Carbon Accounting for LLM Serving. ACM SIGMETRICS Perf. Eval. Review 53(2), 2025 (Fig. 1).</p>
+  <aside class="notes">
+    <p>A different metrics problem appears when several users share a serving system. We can measure a batch's total energy, but that does not immediately tell us how to assign its carbon footprint to individual requests.</p>
+    <p>This paper formalizes the problem using requests, the inference runtime, and a carbon model. It evaluates attribution methods by scalability, fairness, sample efficiency, and incentives, using Shapley values as a fairness reference. It also explains why simple leave-one-out attribution can fail to allocate the total consistently. The figure shows why it is hard: operator cost grows non-linearly with the tokens in a batch.</p>
+    <p>I would treat this as an accounting and mechanism-design question as well as a measurement question. For a project, I would separate two outputs: a consistent allocation of the measured total to users, and an estimate of how a candidate action, like postponing or rerouting a request, changes the footprint. This becomes practically interesting if the metric affects carbon budgets, billing, or user behavior.</p>
+    <p>【提示】这是 CarbonMetrics/PER 的工作，不要标成 SIGMETRICS 主会论文。“efficiency”这里指合作博弈中总量分配的性质，不是节能效率。Shapley 是给定公理和 cost function 下的参照，不是物理真值。</p>
+  </aside>
+</section>
+
+<!-- power availability & architecture -->
+<section>
+  <h2 class="t">Power availability and inference architecture</h2>
+  <div class="area top" style="grid-template-columns: 1fr 1fr; gap: 80px; top: 210px">
+    <figure class="fig">
+      <p class="col-h">Prefill–decode provisioning under a power budget</p>
+      <img src="./figures/pd-fig1.png" alt="Figure 1: modeled serving capacity and power of xp-yd deployments with Pareto front" style="width:700px">
+      <figcaption class="cap">Analytical model of capacity (queueing, compute/memory limits, KV-cache reservations) and average power for each <i>x</i>p<i>y</i>d deployment → a <b>capacity–power Pareto front</b>.</figcaption>
+    </figure>
+    <div class="dsd">
+      <p class="col-h">GreenLLM: disaggregated speculative decoding</p>
+      <p class="rowlbl">Prefill–decode disaggregation (DPD)</p>
+      <div class="pair">
+        <div class="gpu new"><b>New GPU (A100)</b>prefill</div>
+        <div class="link big"><div class="ln"></div>large KV cache</div>
+        <div class="gpu old"><b>Old GPU (T4 / V100)</b>decode</div>
+      </div>
+      <p class="rowlbl" style="margin-top:20px">Speculative decoding, disaggregated (DSD)</p>
+      <div class="pair">
+        <div class="gpu new"><b>New GPU (A100)</b>target model + verifier</div>
+        <div class="link"><div class="ln"></div>token IDs + probabilities</div>
+        <div class="gpu old"><b>Old GPU (T4 / V100)</b>small draft model</div>
+      </div>
+      <p class="cap" style="margin-top:18px">Older GPUs get a useful second life; a scheduler picks DPD / DSD configurations under <b>SLO, bandwidth and carbon</b>.</p>
+    </div>
+  </div>
+  <div class="banner" style="top:815px">workload shape × hardware × bandwidth × power → which serving configuration?
+    <small>Next question: which additional objective or constraint changes that configuration again?</small></div>
+  <p class="src">[P6] M. Yan, H. Wang, L. Biao, H. J. Chao, S. Q. Zhang, W. Cui. Analytical Power-Aware Provisioning for Prefill-Decode Disaggregated AI Inference. arXiv:2609.24639, 2026 (Fig. 1). [P7] T. Shi, Y. Wu, S. Liu, Y. Ding. Disaggregated Speculative Decoding for Carbon-Efficient LLM Serving. IEEE Computer Architecture Letters 24(2), 2025.</p>
+  <aside class="notes">
+    <p>The other two papers from my email connect this discussion to inference architecture.</p>
+    <p>The analytical provisioning paper studies prefill–decode disaggregation. It models serving capacity and average power while accounting for workload lengths, compute and memory limits, queueing, and KV-cache reservations. Its output is a capacity–power Pareto frontier for candidate deployments. That is useful when a provider has to adapt to a changing workload or an available power budget.</p>
+    <p>GreenLLM studies a different architectural choice. It combines prefill–decode disaggregation with disaggregated speculative decoding, placing draft and target computation on different GPU generations and selecting configurations with bandwidth, SLO, and carbon in mind. The speculative path exchanges tokens and probability information rather than repeatedly moving large KV caches.</p>
+    <p>Together, these suggest a concrete place for systems expertise: explain how workload shape and hardware constraints change the best serving configuration, then ask which additional objective changes it again. I would keep the claims separate: the provisioning paper is about power-aware capacity modeling, not lifecycle carbon; GreenLLM is an architecture letter, not a SIGMETRICS paper.</p>
+    <p>【提示】两篇合起来约两分钟。不要把平均功率可行性讲成已经保证了瞬时峰值或电网稳定性。</p>
+  </aside>
+</section>
+
+<!-- power dynamics -->
+<section>
+  <h2 class="t">From average energy to power dynamics</h2>
+  <div class="area top" style="grid-template-columns: 820px 1fr; gap: 70px; top: 210px">
+    <div>
+      <p class="col-h">Same energy, different trajectory <span>conceptual sketch</span></p>
+      <svg class="sketch" width="820" height="420" viewBox="0 0 780 420" role="img" aria-label="Two power curves with the same average: one flat, one oscillating with steep ramps">
+        <line x1="60" y1="380" x2="750" y2="380" stroke="#333" stroke-width="2"/>
+        <line x1="60" y1="40" x2="60" y2="380" stroke="#333" stroke-width="2"/>
+        <text x="20" y="215" font-size="22" fill="#555" transform="rotate(-90 20 215)" text-anchor="middle">Power</text>
+        <text x="405" y="412" font-size="22" fill="#555" text-anchor="middle">Time</text>
+        <path d="M60,320 L60,320 L64,80 L102,80 L106,320 L145,320 L145,320 L149,80 L187,80 L191,320 L230,320 L230,320 L234,80 L272,80 L276,320 L315,320 L315,320 L319,80 L357,80 L361,320 L400,320 L400,320 L404,80 L442,80 L446,320 L485,320 L485,320 L489,80 L527,80 L531,320 L570,320 L570,320 L574,80 L612,80 L616,320 L655,320 L655,320 L659,80 L697,80 L701,320 L740,320" fill="none" stroke="#f76902" stroke-width="4"/>
+        <line x1="60" y1="200" x2="740" y2="200" stroke="#0072a7" stroke-width="6"/>
+        <line x1="80" y1="22" x2="120" y2="22" stroke="#0072a7" stroke-width="6"/><text x="130" y="30" font-size="22" fill="#0072a7" font-weight="700">A: smooth</text>
+        <line x1="300" y1="22" x2="340" y2="22" stroke="#f76902" stroke-width="4"/><text x="350" y="30" font-size="22" fill="#f76902" font-weight="700">B: peaks + steep ramps (same area)</text>
+      </svg>
+      <div class="eq" style="margin-top:14px;font-size:30px"><span class="lbl">One grid-facing metric (PowerTrace)</span>
+        R<sub>Δ, 0.99</sub> = Q<sub>0.99</sub>( |P(t) − P(t−Δ)| / Δ ) <span class="mut" style="font-size:24px">&nbsp;99th-pct ramp rate</span></div>
+    </div>
+    <figure class="fig">
+      <img src="./figures/powertrace-fig2b.png" alt="LLM-PowerTrace Figure 2b: GPU power trace of Qwen3-32B served by vLLM on one H100" style="width:100%">
+      <figcaption class="cap"><b>Real trace:</b> Qwen3-32B on vLLM, one H100 (20 ms DCGM example). The dataset: 1,788 fine-tuning and 405 serving runs at 100 ms per GPU.</figcaption>
+      <ul class="b sm" style="margin-top:22px">
+        <li>Bursty arrivals widen the power band (~20 → 1,100 W) and raise the P99 ramp ~20×</li>
+        <li>The energy-optimal SM clock (1200 MHz) is <b>not</b> the ramp-optimal one</li>
+      </ul>
+    </figure>
+  </div>
+  <p class="src">[P8] J. Wang, J. Singh, H. Xu, X. Li, M. Yan, S. Liu, Y. Li, Y. Chen, W. Cui. LLM-PowerTrace: A Dataset of Time-Resolved GPU Power Traces for AI Compute. arXiv:2610.38315, 2026, preprint (Fig. 2b, §4.2).</p>
+  <aside class="notes">
+    <p>LLM-PowerTrace adds another dimension: time resolution. It releases GPU power traces sampled every 100 milliseconds and examines behavior beyond total energy, including ramps and synchronization. It is currently a preprint.</p>
+    <p>The intuition is simple. Two deployments can consume similar energy over a fixed interval but have different power trajectories. That difference can matter to the infrastructure supplying them: transformers, backup units, and grid balancing. The paper reports, for instance, that bursty arrivals raise the 99th-percentile ramp about twentyfold, and that the SM clock minimizing energy per token is not the one minimizing ramps: another decision reversal.</p>
+    <p>A possible systems project would connect these observations to a controller. Could we coordinate batch admission or power caps across replicas to reduce aggregate ramps while preserving serving throughput? The contribution would need to go beyond describing a trace: which control works, when, and at what performance cost.</p>
+    <p>There is a measurement boundary. A 100-millisecond GPU trace supports claims at that observation scale. It cannot by itself establish sub-millisecond electrical safety or represent all facility power. We should match the claim to the instrument.</p>
+    <p>【提示】PowerTrace 已经定义了 ramp 等动态指标，“增加 ramp metric”本身不能当作你的新颖性。左图是示意，不是数据。</p>
+  </aside>
+</section>
+
+<!-- ============================== 4. new metrics ============================== -->
+<section data-section="New metrics">
+  <h2 class="t">How to build a useful new metric</h2>
+  <div class="cards c4 q4" style="position:absolute;left:96px;right:96px;top:215px;gap:36px">
+    <div class="card"><p class="tag">1 · Missing effect?</p><h3>Name what existing metrics miss</h3><div class="thumb"><img src="./figures/healthserve-fig3.png" alt=""></div>
+      <p>Local harm, shared responsibility, a power constraint hidden by averages. Fix the decision context and the measurement boundary.</p>
+      <div class="ex"><b>Today:</b> health cost of grid pollutants (HealthServe)</div></div>
+    <div class="card o"><p class="tag">2 · Decision reversal?</p><h3>Old metric prefers A, new one prefers B</h3><div class="thumb"><img src="./figures/healthserve-fig4.png" alt=""></div>
+      <p>Then show how <i>often</i> this happens on realistic workloads. One synthetic example is a start, not evidence.</p>
+      <div class="ex"><b>Today:</b> Carbon-Opt ≠ Health-Opt; cache sign flips by grid; energy-optimal clock ≠ ramp-optimal clock</div></div>
+    <div class="card"><p class="tag">3 · Observable?</p><h3>Measurable or estimable in time</h3><div class="thumb"><img src="./figures/powertrace-fig2b.png" alt=""></div>
+      <p>Separate measured from modeled quantities. Count controller overhead. How much estimation error changes the policy?</p>
+      <div class="ex"><b>Today:</b> 100 ms GPU traces; screening-level health models; SSD lifetime sensitivity</div></div>
+    <div class="card o"><p class="tag">4 · Robust gain?</p><h3>Better under fixed service</h3><div class="thumb"><img src="./figures/pd-fig1.png" alt=""></div>
+      <p>Hold throughput, TTFT, TPOT, rejection rate and a quality threshold. No credit for serving less or moving work outside the window.</p>
+      <div class="ex"><b>Ablate:</b> new metric only / new controller only / both</div></div>
+  </div>
+  <div class="banner" style="top:845px;font-size:31px">A sustainability metric becomes a systems contribution when it changes a concrete decision, captures an effect existing metrics miss, and survives measurement and validation.</div>
+  <p class="src">Synthesis of the cases above; this framework is my proposal, not taken from a single paper. Thumbnails: HealthServe Figs. 3–4; LLM-PowerTrace Fig. 2b; PD power-aware provisioning Fig. 1.</p>
+  <aside class="notes">
+    <p>Based on these examples, here is the process I would propose for developing a new metric.</p>
+    <p>First, identify the effect that an existing metric misses: local environmental harm, shared-resource responsibility, or a power constraint that average energy hides. The metric needs a clear decision context and measurement boundary.</p>
+    <p>Second, demonstrate a decision reversal. Find configurations A and B for which the existing objective prefers A, while the additional objective gives a defensible reason to prefer B. Then test how frequently that disagreement occurs in realistic workloads. We saw three reversals today.</p>
+    <p>Third, make the metric observable or estimable at the required timescale. Distinguish direct measurements from modeled quantities, include controller overhead, and ask how much estimation error changes the policy.</p>
+    <p>Fourth, evaluate the resulting decision under fixed service requirements. For inference I would keep throughput, time to first token, time per output token, rejection rate, and a declared quality threshold. A system should not look sustainable merely because it serves fewer requests or shifts work outside the measured interval. And ablate: is the gain from the metric, from the controller, or from a weak baseline?</p>
+    <p>【提示】这是你的核心观点。强调“换 metric 后，系统会不会选不同 knob”比罗列十个指标更有说服力。</p>
+  </aside>
+</section>
+
+<!-- three kinds of new + reporting -->
+<section>
+  <h2 class="t">Three kinds of “new”, and how to report them</h2>
+  <div class="area top" style="grid-template-columns: 860px 1fr; gap: 80px; top: 220px">
+    <div>
+      <div class="methods" style="margin-top:0">
+        <div class="m" style="grid-template-columns:300px 1fr"><b>A new impact dimension</b><span>Health, water. Must show decision-relevant disagreement with existing objectives.</span></div>
+        <div class="m" style="grid-template-columns:300px 1fr"><b>A corrected accounting</b><span>Embodied allocation, shared attribution. State the axioms, total boundary, and use case.</span></div>
+        <div class="m" style="grid-template-columns:300px 1fr"><b>A new definition of useful work or timescale</b><span>Footprint per successful task; power dynamics. Needs reproducible task criteria and instrument resolution.</span></div>
+      </div>
+      <div class="caveat" style="margin-top:28px">The concept need not be brand-new: the contribution can be a better measurement, model, algorithm or system around it. Goodput-style ratios already exist.</div>
+    </div>
+    <div>
+      <div class="eq"><span class="lbl">Report per useful task (proposed)</span>
+        F<sub>useful</sub> = F<sub>all attempts</sub> / N<sub>tasks meeting quality &amp; SLO</sub>
+        <small>Numerator includes failures, retries, draft/verify, controller overhead. Always report totals, demand, and rejections next to the ratio: efficiency can improve while absolute use grows.</small>
+      </div>
+      <div class="eq"><span class="lbl">Optimize with budgets, not arbitrary weights</span>
+        max useful goodput(x)<br>
+        <span style="font-size:28px">s.t. latency SLO, &nbsp;quality ≥ q<br>&emsp;&ensp; C<sub>op</sub>(x) ≤ B<sub>C</sub> (carbon), &nbsp;P<sub>window</sub>(x) ≤ B<sub>P</sub> (power)</span>
+        <small>Pick one added constraint first. Embodied carbon belongs to the slower provisioning decision.</small>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    <p>It helps to say which kind of "new" we mean. One: a new impact dimension, like health or water; that needs a decision-relevant disagreement with existing objectives. Two: a corrected accounting, like embodied allocation or shared attribution; that needs clear axioms and a total boundary. Three: a new definition of useful work or of timescale, like footprint per successful task or power dynamics; that needs reproducible task criteria and the right instrument resolution.</p>
+    <p>One candidate reporting metric is footprint per successful, SLO-compliant task. I present it as a proposed operational definition, not a new standard. Its numerator includes the footprint of all attempts, including failures and retries; its denominator counts completed tasks satisfying the declared conditions. Even then, I would report total footprint and completed demand alongside the ratio.</p>
+    <p>For optimization, I would initially prefer explicit budgets and Pareto curves over combining carbon, water, health, and performance into one arbitrarily weighted number, and start with a single added constraint.</p>
+    <p>【提示】不要声称这个 ratio 是首次提出；Goodput 的思想已有。平均与边际碳强度不能互换；P_window 要定义观测窗口。</p>
+  </aside>
+</section>
+
+<!-- ============================== 5. next steps ============================== -->
+<section data-section="Next steps">
+  <h2 class="t">Three candidate research directions</h2>
+  <div class="cards c3 dirs" style="position:absolute;left:96px;right:96px;top:215px;gap:46px">
+    <div class="card o"><p class="tag">A · start here</p><h3>Useful work under budgets</h3><div class="thumb"><svg viewBox="0 0 400 140" width="100%" height="100%" role="img" aria-label="Conceptual sketch: useful goodput versus resource budget, with a Pareto frontier">
+          <g font-family="Arial">
+            <line x1="40" y1="115" x2="390" y2="115" stroke="#333" stroke-width="2"/><line x1="40" y1="10" x2="40" y2="115" stroke="#333" stroke-width="2"/>
+            <text x="215" y="136" font-size="15" fill="#555" text-anchor="middle">resource budget (power or carbon)</text>
+            <text x="28" y="62" font-size="15" fill="#555" text-anchor="middle" transform="rotate(-90 28 62)">useful goodput</text>
+            <path d="M50,108 C110,40 200,25 380,18" fill="none" stroke="#f76902" stroke-width="4"/>
+            <g fill="#9bb8d3"><circle cx="120" cy="92" r="6"/><circle cx="170" cy="78" r="6"/><circle cx="230" cy="66" r="6"/><circle cx="290" cy="58" r="6"/><circle cx="200" cy="95" r="6"/><circle cx="320" cy="80" r="6"/></g>
+            <circle cx="210" cy="30" r="8" fill="#0072a7"/><text x="222" y="50" font-size="15" fill="#0072a7" font-weight="700">controller target</text>
+            <text x="385" y="100" font-size="13" fill="#999" text-anchor="end">conceptual</text>
+          </g></svg></div>
+      <p>Quality- and SLO-aware inference. Begin with batching, power caps, cache capacity on a fixed model.</p>
+      <p><b>Question:</b> can a resource-aware controller increase completed useful work under explicit budgets?</p>
+      <div class="ex">Later: model selection, reasoning budgets (needs careful quality evaluation)</div></div>
+    <div class="card"><p class="tag">B</p><h3>Attributable shared serving</h3><div class="thumb"><img src="./figures/accounting-fig1.png" alt=""></div>
+      <p>Cheap online attribution vs. an offline Shapley reference on small batches.</p>
+      <p><b>Question:</b> does the accounting signal encourage useful behavior (batching flexibility, cache reuse)?</p>
+      <div class="ex">Keep fair allocation and causal savings separate</div></div>
+    <div class="card"><p class="tag">C</p><h3>Coordinated power dynamics</h3><div class="thumb"><img src="./figures/minos-fig1.png" alt=""></div>
+      <p>Replicas that are each efficient can still add up to a bad aggregate power trajectory.</p>
+      <p><b>Question:</b> does coordination reduce ramps or cap violations without losing much goodput?</p>
+      <div class="ex">Runs on local hardware; closed-loop testable</div></div>
+  </div>
+  <div class="caveat abs" style="top:905px">Candidate directions, not claims that the problems are untouched: carbon-aware inference, attribution frameworks and power characterization already exist. A focused related-work review comes before any novelty claim.</div>
+  <p class="src">A: conceptual sketch. B: [P5] Li et al., Fig. 1. C: Jain et al., Minos, SIGMETRICS 2026, Fig. 1 (GPU power spikes above TDP).</p>
+  <aside class="notes">
+    <p>I see three directions worth testing, with different levels of ambition.</p>
+    <p>Direction A is quality- and SLO-aware inference under resource budgets. We could begin with batching, power caps, and cache capacity while holding the model fixed. The question is whether a resource-aware controller can improve completed useful work under explicit constraints. Later we could extend to model selection or reasoning budgets, which need much more careful quality evaluation.</p>
+    <p>Direction B is actionable attribution in shared serving: compare a cheap online attribution method with an offline reference on small batches, then examine whether the accounting signal encourages useful behavior.</p>
+    <p>Direction C is coordinated inference for power dynamics: independent replicas may each be locally efficient while producing an unfavorable aggregate power trajectory.</p>
+    <p>My recommendation is to start with A as the prototype structure, and choose one environmental or power dimension for the first experiment. Optimizing carbon, water, health, quality, fairness, and grid behavior at once would make it hard to identify the source of any gain.</p>
+    <p>【提示】把第一步收敛到 2–3 个 knobs 和一个新维度。可以请对方依据系统经验判断哪个 bottleneck 最值得先测。</p>
+  </aside>
+</section>
+
+<!-- prototype -->
+<section>
+  <h2 class="t">A first prototype and evaluation</h2>
+  <div class="loop">
+    <div class="flow" style="height:150px">
+      <div class="box">Workload replay<small>request lengths, arrivals, prompt reuse</small></div><div class="ar">→</div>
+      <div class="box">Serving runtime<small>batch size, power cap, cache size</small></div><div class="ar">→</div>
+      <div class="box">Telemetry<small>latency, throughput, power, switch cost</small></div><div class="ar">→</div>
+      <div class="box og">Response model<small>empirical or analytical</small></div><div class="ar">→</div>
+      <div class="box og hl">Controller<small>selects config as load or budget changes</small></div>
+    </div>
+    <p style="text-align:right;font-size:24px;color:#888;margin:8px 40px 0 0">↺ feeds back into the runtime</p>
+  </div>
+  <div class="cards c3" style="position:absolute;left:96px;right:96px;top:500px;gap:46px">
+    <div class="card"><p class="tag">Baselines</p>
+      <p>Performance-oriented policy · energy-oriented policy · existing policy for the chosen metric · offline reference with future information</p></div>
+    <div class="card"><p class="tag">Ablations</p>
+      <p>Remove the new metric · remove adaptivity · vary uncertain environmental parameters · unseen workloads and hardware</p></div>
+    <div class="card o"><p class="tag">What we want to see</p>
+      <p>(1) a measurable disagreement between objectives (2) a useful performance–resource frontier (3) a low-overhead controller near it (4) clear failure conditions</p></div>
+  </div>
+  <div class="caveat abs" style="top:830px">No multi-region hardware? Measure one node for real, replay environmental traces for geography, and label that part as <b>model-based evaluation</b>.</div>
+  <aside class="notes">
+    <p>For a first prototype, I would use a small inference deployment and replay workloads with controlled request lengths, arrival patterns, and prompt reuse. We would measure latency, throughput, power, and the cost of changing configurations.</p>
+    <p>The initial model would predict the response of a few configurations. It could be empirical or analytical; the requirement is that it explains enough of the tradeoff to support a decision. We then build a controller that selects among those configurations as load or the resource budget changes.</p>
+    <p>The baseline set should make the comparison interpretable: a performance-oriented policy, an energy-oriented policy, an existing policy for the chosen metric, and an offline reference with future information. Ablations remove either the new metric or the adaptive controller.</p>
+    <p>I would look for four outputs: a measurable disagreement between objectives, a useful performance–resource frontier, a controller that approaches that frontier at low overhead, and clear failure conditions. If geographic environmental data are replayed rather than measured in a real multi-region deployment, we describe that part as a model-based evaluation.</p>
+    <p>【提示】不承诺某个百分比。没有多地区硬件，就做单机实测加环境 trace replay，并明确边界。</p>
+  </aside>
+</section>
+
+<!-- discussion -->
+<section>
+  <h2 class="t">Discussion</h2>
+  <div class="ask">
+    <p class="q">Where would one new metric most likely change a real decision, and let a system exploit it?</p>
+    <div class="opts">
+      <div><span>OPTION 1</span>Inference provisioning<small>batching, power caps, cache capacity under a resource budget</small></div>
+      <div><span>OPTION 2</span>Shared-resource accounting<small>attribution that is cheap, fair and changes behavior</small></div>
+      <div><span>OPTION 3</span>Coordinated power management<small>replicas, ramps, cap violations vs. goodput</small></div>
+    </div>
+  </div>
+  <div class="banner" style="top:760px">Macro view: which impacts matter. Systems view: make one of them observable and controllable.</div>
+  <aside class="notes">
+    <p>The direction I am most interested in is supporting the growth of useful AI capability with better measurements and resource management. My macro-level perspective helps identify which impacts may matter; a systems collaboration could turn one of those impacts into an observable quantity and a working controller.</p>
+    <p>For a first project, I would like to find one case where the metric changes the decision and the system can exploit that change. From your experience, which part seems most promising to investigate first: inference provisioning, shared-resource accounting, or coordinated power management?</p>
+    <p>【提示】停在这个问题上，让对方讲。</p>
+  </aside>
+</section>
+
+<!-- ============================== backup ============================== -->
+<section data-section="Backup">
+  <h2 class="t">Backup: likely questions</h2>
+  <div class="qa">
+    <div><b>Isn't this just energy × another coefficient?</b><p>Sometimes. If the coefficient is constant across feasible actions, the optimizer does not change. The opportunity appears when impacts vary across actions, places, time or shared execution. Show that variation before building a controller.</p></div>
+    <div><b>Why not just optimize cost?</b><p>Cost may correlate with resource use, but that is an empirical question. Measure where it agrees with the environmental objective and where it does not, and report the cost of the improvement.</p></div>
+    <div><b>Are health and water measured per request?</b><p>Typically we measure computing activity and energy, then estimate consequences with external models and data. Report the chain, its spatial/temporal resolution and its uncertainty.</p></div>
+    <div><b>Is Shapley the correct footprint?</b><p>It is a principled allocation reference for a specified cooperative cost model. It does not measure the physical effect of removing one request.</p></div>
+    <div><b>Is a new metric enough for a SIGMETRICS paper?</b><p>A metric needs evidence of why it matters. The contribution can be a measurement methodology, a validated model, an algorithm or a system; aim to connect the metric to a demonstrated decision change and an evaluated mechanism.</p></div>
+    <div><b>What can we do without a large cluster?</b><p>Validate the response model and controller on available hardware; evaluate larger scenarios by calibrated simulation or trace replay, with conclusions tied to what was measured.</p></div>
+  </div>
+  <aside class="notes">
+    <p>If asked what my contribution is beyond these papers: at this stage, a proposed research question and evaluation plan. I would choose one mechanism, identify the closest prior work, and establish a reproducible limitation before claiming a new contribution.</p>
+  </aside>
+</section>
+
+<section>
+  <h2 class="t">Backup: reading list</h2>
+  <p class="lead">Zotero collection System → computing_knobs (11 papers)</p>
+  <div style="position:absolute;left:96px;right:96px;top:240px">
+    <table class="tbl reading">
+      <thead><tr><th>Paper</th><th>Venue</th><th>Role in this talk</th></tr></thead>
+      <tbody>
+        <tr><td><b>[P1] EcoServe</b>: Designing Carbon-Aware AI Inference Systems</td><td>arXiv 2025</td><td>Operational vs. embodied carbon</td></tr>
+        <tr><td><b>[P2] GreenCache</b>: Cache Your Prompt When It's Green</td><td>SIGMETRICS 2026</td><td>Case: familiar knob, new optimum</td></tr>
+        <tr><td><b>[P3] HealthServe</b>: A Public Health-Aware Inference Framework</td><td>POMACS / SIGMETRICS 2026</td><td>Case: new objective, decision reversal</td></tr>
+        <tr><td><b>[P4] WaterWise</b>: Co-optimizing Carbon- and Water-Footprint</td><td>PPoPP 2025</td><td>Carbon vs. water</td></tr>
+        <tr><td><b>[P5]</b> Fair, Practical, and Efficient Carbon Accounting for LLM Serving</td><td>SIGMETRICS PER 2025</td><td>Attribution in shared serving</td></tr>
+        <tr><td><b>[P6]</b> Analytical Power-Aware Provisioning for PD-Disaggregated Inference</td><td>arXiv 2026</td><td>Capacity–power modeling</td></tr>
+        <tr><td><b>[P7] GreenLLM</b>: Disaggregated Speculative Decoding for Carbon-Efficient Serving</td><td>IEEE CAL 2025</td><td>Architecture + carbon</td></tr>
+        <tr><td><b>[P8] LLM-PowerTrace</b>: Time-Resolved GPU Power Traces</td><td>arXiv 2026</td><td>Power dynamics</td></tr>
+        <tr><td><b>[P9] Sprout</b>: Green Generative AI with Carbon-Efficient LLM Inference</td><td>EMNLP 2024</td><td>Output/quality as a knob</td></tr>
+        <tr><td><b>[P10] FissionReady</b>: Workload and Power Scheduling with Small Modular Reactors</td><td>arXiv 2026</td><td>Compute–energy supply coupling</td></tr>
+        <tr><td><b>[P11]</b> Strategies and design for increasing AI sustainability</td><td>Nat. Rev. Clean Tech. 2026</td><td>Broad reading</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</div>
+</div>
+</body>
+</html>
