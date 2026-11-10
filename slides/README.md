@@ -53,6 +53,9 @@ No transitions or build animations.
 
 - PDF: `npm run pdf` → `slides.pdf` (uses the installed Google Chrome)
 - Static site: `npm run build` → `dist/`
+- GitHub Pages: every push to `main` runs `.github/workflows/deploy.yml` (at the repository root), which builds
+  `slides/` and publishes `slides/dist/` to the `gh-pages` branch. `npm run deploy` does the same by hand.
+  (site: https://lipengfeizju.github.io/presentation_sustainability/)
 - Screenshots for layout checks: `npm run shots -- http://localhost:5173/ shots` → `shots/slide-NN.png`
   (needs `npm run dev` running)
 
